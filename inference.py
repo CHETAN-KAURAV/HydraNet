@@ -214,4 +214,5 @@ ax[2].axis("off")
 
 plt.tight_layout()
 
-plt.show()
+plt.savefig("prediction_result.png")
+print("Visualization saved!")
