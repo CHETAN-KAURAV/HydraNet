@@ -6,41 +6,48 @@ from utils.dataset import FloodDataset
 from models.unet_model import build_unet
 from utils.losses import BCEDiceLoss
 
-# -----------------------------
-# Device
-# -----------------------------
+# =====================================================
+# DEVICE
+# =====================================================
+
 DEVICE = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
 
-print("Using Device:", DEVICE)
+print(f"Using Device: {DEVICE}")
 
-# -----------------------------
-# Paths
-# -----------------------------
-IMAGE_DIR = "data/images"
-MASK_DIR = "data/masks"
+# =====================================================
+# DATA PATHS
+# =====================================================
 
-# -----------------------------
-# Hyperparameters
-# -----------------------------
+IMAGE_DIR = "/content/drive/MyDrive/HydraNetData/images"
+MASK_DIR = "/content/drive/MyDrive/HydraNetData/masks"
+
+# =====================================================
+# HYPERPARAMETERS
+# =====================================================
+
 IMAGE_SIZE = 256
 BATCH_SIZE = 4
-LR = 1e-4
+LEARNING_RATE = 1e-4
 EPOCHS = 5
 
-# -----------------------------
-# Dataset
-# -----------------------------
+# =====================================================
+# DATASET
+# =====================================================
+
 dataset = FloodDataset(
     image_dir=IMAGE_DIR,
     mask_dir=MASK_DIR,
     image_size=IMAGE_SIZE
 )
 
-# -----------------------------
-# Train / Validation Split
-# -----------------------------
+print(f"\nTotal Dataset Size: {len(dataset)}")
+
+# =====================================================
+# TRAIN / VALIDATION SPLIT
+# =====================================================
+
 train_size = int(0.8 * len(dataset))
 val_size = len(dataset) - train_size
 
@@ -49,120 +56,185 @@ train_dataset, val_dataset = random_split(
     [train_size, val_size]
 )
 
-# -----------------------------
-# DataLoaders
-# -----------------------------
+print(f"Training Samples  : {len(train_dataset)}")
+print(f"Validation Samples: {len(val_dataset)}")
+
+# =====================================================
+# DATALOADERS
+# =====================================================
+
 train_loader = DataLoader(
     train_dataset,
     batch_size=BATCH_SIZE,
     shuffle=True,
-    num_workers=0
+    num_workers=2,
+    pin_memory=True
 )
 
 val_loader = DataLoader(
     val_dataset,
     batch_size=BATCH_SIZE,
     shuffle=False,
-    num_workers=0
+    num_workers=2,
+    pin_memory=True
 )
 
-# -----------------------------
-# Model
-# -----------------------------
+# =====================================================
+# MODEL
+# =====================================================
+
 model = build_unet().to(DEVICE)
 
-# -----------------------------
-# Loss Function
-# -----------------------------
+# =====================================================
+# LOSS FUNCTION
+# =====================================================
+
 criterion = BCEDiceLoss()
 
-# -----------------------------
-# Optimizer
-# -----------------------------
+# =====================================================
+# OPTIMIZER
+# =====================================================
+
 optimizer = torch.optim.Adam(
     model.parameters(),
-    lr=LR
+    lr=LEARNING_RATE
 )
 
-# -----------------------------
-# Training Loop
-# -----------------------------
+# =====================================================
+# TRAINING LOOP
+# =====================================================
+
 best_val_loss = float("inf")
 
 for epoch in range(EPOCHS):
 
-    # -------------------------
+    # =================================================
     # TRAINING
-    # -------------------------
+    # =================================================
+
     model.train()
 
-    train_loss = 0
+    train_loss = 0.0
 
     train_bar = tqdm(
         train_loader,
-        desc=f"Epoch {epoch+1}/{EPOCHS}"
+        desc=f"Epoch {epoch + 1}/{EPOCHS}"
     )
 
-    for images, masks in train_bar:
+    for batch_idx, (images, masks) in enumerate(train_bar):
+
+        # ---------------------------------------------
+        # Move to GPU
+        # ---------------------------------------------
 
         images = images.to(DEVICE)
-
         masks = masks.to(DEVICE)
 
-        # Forward
+        # ---------------------------------------------
+        # CHECK INPUTS FOR NaNs
+        # ---------------------------------------------
+
+        if torch.isnan(images).any():
+            print(f"\nNaN detected in INPUT IMAGES at batch {batch_idx}")
+            continue
+
+        if torch.isnan(masks.float()).any():
+            print(f"\nNaN detected in MASKS at batch {batch_idx}")
+            continue
+
+        # ---------------------------------------------
+        # Forward Pass
+        # ---------------------------------------------
+
         outputs = model(images)
 
-        # Loss
+        # ---------------------------------------------
+        # CHECK OUTPUTS FOR NaNs
+        # ---------------------------------------------
+
+        if torch.isnan(outputs).any():
+            print(f"\nNaN detected in MODEL OUTPUTS at batch {batch_idx}")
+            continue
+
+        # ---------------------------------------------
+        # Compute Loss
+        # ---------------------------------------------
+
         loss = criterion(outputs, masks)
 
-        # Backprop
+        # ---------------------------------------------
+        # CHECK LOSS FOR NaN
+        # ---------------------------------------------
+
+        if torch.isnan(loss):
+            print(f"\nNaN LOSS detected at batch {batch_idx}")
+            continue
+
+        # ---------------------------------------------
+        # Backpropagation
+        # ---------------------------------------------
+
         optimizer.zero_grad()
 
         loss.backward()
+
+        # ---------------------------------------------
+        # Gradient Clipping
+        # ---------------------------------------------
+
+        torch.nn.utils.clip_grad_norm_(
+            model.parameters(),
+            max_norm=1.0
+        )
 
         optimizer.step()
 
         train_loss += loss.item()
 
         train_bar.set_postfix(
-            loss=loss.item()
+            loss=f"{loss.item():.4f}"
         )
 
     avg_train_loss = train_loss / len(train_loader)
 
-    # -------------------------
+    # =================================================
     # VALIDATION
-    # -------------------------
+    # =================================================
+
     model.eval()
 
-    val_loss = 0
+    val_loss = 0.0
 
     with torch.no_grad():
 
         for images, masks in val_loader:
 
             images = images.to(DEVICE)
-
             masks = masks.to(DEVICE)
 
             outputs = model(images)
 
             loss = criterion(outputs, masks)
 
+            if torch.isnan(loss):
+                continue
+
             val_loss += loss.item()
 
     avg_val_loss = val_loss / len(val_loader)
 
-    # -------------------------
-    # Print Metrics
-    # -------------------------
-    print(f"\nEpoch {epoch+1}")
+    # =================================================
+    # PRINT METRICS
+    # =================================================
+
+    print(f"\nEpoch {epoch + 1}")
     print(f"Train Loss: {avg_train_loss:.4f}")
     print(f"Val Loss  : {avg_val_loss:.4f}")
 
-    # -------------------------
-    # Save Best Model
-    # -------------------------
+    # =================================================
+    # SAVE BEST MODEL
+    # =================================================
+
     if avg_val_loss < best_val_loss:
 
         best_val_loss = avg_val_loss
@@ -173,3 +245,5 @@ for epoch in range(EPOCHS):
         )
 
         print("Best model saved!")
+
+print("\nTraining Complete!")

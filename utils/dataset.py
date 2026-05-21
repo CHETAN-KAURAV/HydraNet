@@ -64,9 +64,25 @@ class FloodDataset(Dataset):
         # -----------------------------
         # Normalize SAR image
         # -----------------------------
-        image = (image - image.mean()) / (
-                image.std() + 1e-8
+        # Clean invalid values
+        # -----------------------------
+        image = np.nan_to_num(
+            image,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0
         )
+
+        # -----------------------------
+        # Safe normalization
+        # -----------------------------
+        mean = image.mean()
+        std = image.std()
+
+        if std < 1e-6:
+            std = 1e-6
+
+        image = (image - mean) / std
 
         # -----------------------------
         # Handle invalid labels

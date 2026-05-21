@@ -13,15 +13,22 @@ class DiceLoss(nn.Module):
         # Apply sigmoid
         preds = torch.sigmoid(preds)
 
-        # Flatten
-        preds = preds.view(-1)
-        targets = targets.view(-1)
+        # Remove channel dimension
+        preds = preds.squeeze(1)
 
-        # Remove ignore pixels (255)
-        valid_mask = targets != 255
+        # Create valid mask
+        valid_mask = (targets != 255)
 
+        # Keep only valid pixels
         preds = preds[valid_mask]
         targets = targets[valid_mask]
+
+        # Convert targets to float
+        targets = targets.float()
+
+        # Flatten
+        preds = preds.contiguous().view(-1)
+        targets = targets.contiguous().view(-1)
 
         intersection = (preds * targets).sum()
 
@@ -39,28 +46,26 @@ class BCEDiceLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.bce = nn.BCEWithLogitsLoss(
-            reduction='mean'
-        )
+        self.bce = nn.BCEWithLogitsLoss()
 
         self.dice = DiceLoss()
 
     def forward(self, preds, targets):
 
-        # BCE expects float targets
-        targets_float = targets.float()
+        # Valid pixels only
+        valid_mask = (targets != 255)
 
-        # Ignore mask for BCE
-        valid_mask = targets != 255
+        # BCE part
+        preds_bce = preds.squeeze(1)[valid_mask]
 
-        preds_valid = preds.squeeze(1)[valid_mask]
-        targets_valid = targets_float[valid_mask]
+        targets_bce = targets[valid_mask].float()
 
         bce_loss = self.bce(
-            preds_valid,
-            targets_valid
+            preds_bce,
+            targets_bce
         )
 
+        # Dice part
         dice_loss = self.dice(
             preds,
             targets
