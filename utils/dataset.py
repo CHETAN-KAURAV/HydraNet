@@ -29,9 +29,9 @@ class FloodDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        # -----------------------------
+
         # Get filenames
-        # -----------------------------
+
         image_name = self.image_files[idx]
 
         mask_name = image_name.replace(
@@ -49,23 +49,23 @@ class FloodDataset(Dataset):
             mask_name
         )
 
-        # -----------------------------
+
         # Load SAR image
-        # -----------------------------
+
         with rasterio.open(image_path) as src:
             image = src.read(1).astype(np.float32)
 
-        # -----------------------------
+
         # Load flood mask
-        # -----------------------------
+
         with rasterio.open(mask_path) as src:
             mask = src.read(1).astype(np.float32)
 
-        # -----------------------------
+
         # Normalize SAR image
-        # -----------------------------
+
         # Clean invalid values
-        # -----------------------------
+
         image = np.nan_to_num(
             image,
             nan=0.0,
@@ -73,9 +73,9 @@ class FloodDataset(Dataset):
             neginf=0.0
         )
 
-        # -----------------------------
+
         # Safe normalization
-        # -----------------------------
+
         mean = image.mean()
         std = image.std()
 
@@ -84,15 +84,15 @@ class FloodDataset(Dataset):
 
         image = (image - mean) / std
 
-        # -----------------------------
+
         # Handle invalid labels
-        # -----------------------------
+
         # Convert -1 to 255 (ignore index)
         mask[mask == -1] = 255
 
-        # -----------------------------
+
         # Resize image and mask
-        # -----------------------------
+
         image = cv2.resize(
             image,
             (self.image_size, self.image_size),
@@ -105,17 +105,68 @@ class FloodDataset(Dataset):
             interpolation=cv2.INTER_NEAREST
         )
 
-        # -----------------------------
-        # Add channel dimension
-        # -----------------------------
-        image = np.expand_dims(image, axis=0)
 
-        # Shape:
-        # (1, H, W)
+        # CREATE PSEUDO-ELEVATION MAP
 
-        # -----------------------------
+        pseudo_elevation = cv2.GaussianBlur(
+            image,
+            (21, 21),
+            0
+        )
+
+        # Normalize
+        pseudo_elevation = (
+                                   pseudo_elevation - pseudo_elevation.min()
+                           ) / (
+                                   pseudo_elevation.max() -
+                                   pseudo_elevation.min() + 1e-8
+                           )
+
+
+        # CREATE PSEUDO-SLOPE MAP
+
+
+        grad_x = cv2.Sobel(
+            pseudo_elevation,
+            cv2.CV_32F,
+            1,
+            0,
+            ksize=3
+        )
+
+        grad_y = cv2.Sobel(
+            pseudo_elevation,
+            cv2.CV_32F,
+            0,
+            1,
+            ksize=3
+        )
+
+        pseudo_slope = np.sqrt(
+            grad_x ** 2 + grad_y ** 2
+        )
+
+        # Normalize
+        pseudo_slope = (
+                               pseudo_slope - pseudo_slope.min()
+                       ) / (
+                               pseudo_slope.max() -
+                               pseudo_slope.min() + 1e-8
+                       )
+
+        # STACK CHANNELS
+
+        image = np.stack([
+            image,
+            pseudo_elevation,
+            pseudo_slope
+        ], axis=0)
+
+        # Final shape:
+        # (3, H, W)
+
         # Convert to tensors
-        # -----------------------------
+
         image = torch.tensor(
             image,
             dtype=torch.float32

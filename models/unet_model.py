@@ -8,7 +8,7 @@ def build_unet():
         encoder_name="resnet34",
         encoder_weights="imagenet",
 
-        in_channels=1,
+        in_channels=3,
         classes=1,
 
         activation=None
