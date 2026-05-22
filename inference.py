@@ -141,10 +141,12 @@ input_tensor = np.expand_dims(
     axis=0
 )
 
-input_tensor = torch.tensor(
-    input_tensor,
+input_tensor = input_tensor.clone().detach()
+
+input_tensor = input_tensor.to(
+    DEVICE,
     dtype=torch.float32
-).to(DEVICE)
+)
 
 
 # INFERENCE
