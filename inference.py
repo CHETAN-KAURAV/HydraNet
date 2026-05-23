@@ -211,11 +211,16 @@ with torch.no_grad():
 
 prediction = prediction.squeeze().cpu().numpy()
 
+print("\nPrediction Statistics")
+print("----------------------")
+print("Min :", prediction.min())
+print("Max :", prediction.max())
+print("Mean:", prediction.mean())
 
 # THRESHOLD
 
 pred_mask = (
-        prediction > 0.3
+        prediction > 0.15
 ).astype(np.uint8)
 
 
