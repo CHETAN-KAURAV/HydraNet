@@ -22,7 +22,6 @@ print(f"Using Device: {DEVICE}")
 
 # PATHS
 
-
 IMAGE_DIR = "/content/drive/MyDrive/HydraNetData/images"
 MASK_DIR = "/content/drive/MyDrive/HydraNetData/masks"
 
@@ -47,7 +46,7 @@ model.eval()
 print("Model Loaded Successfully!")
 
 
-# SELECT RANDOM SAMPLE
+# RANDOM SAMPLE
 
 
 image_files = sorted([
@@ -77,7 +76,6 @@ print(f"\nSelected Image: {sample_image}")
 
 # LOAD IMAGE
 
-
 with rasterio.open(image_path) as src:
     image = src.read(1).astype(np.float32)
 
@@ -100,7 +98,7 @@ image = np.nan_to_num(
 )
 
 
-# NORMALIZATION
+# NORMALIZE
 
 
 mean = image.mean()
@@ -127,30 +125,80 @@ mask_resized = cv2.resize(
     interpolation=cv2.INTER_NEAREST
 )
 
+# PSEUDO-ELEVATION
 
-# PREPARE TENSOR
-
-
-input_tensor = np.expand_dims(
+pseudo_elevation = cv2.GaussianBlur(
     image_resized,
-    axis=0
+    (21, 21),
+    0
 )
+
+pseudo_elevation = (
+        pseudo_elevation - pseudo_elevation.min()
+) / (
+        pseudo_elevation.max()
+        - pseudo_elevation.min()
+        + 1e-8
+)
+
+
+# PSEUDO-SLOPE
+
+grad_x = cv2.Sobel(
+    pseudo_elevation,
+    cv2.CV_32F,
+    1,
+    0,
+    ksize=3
+)
+
+grad_y = cv2.Sobel(
+    pseudo_elevation,
+    cv2.CV_32F,
+    0,
+    1,
+    ksize=3
+)
+
+pseudo_slope = np.sqrt(
+    grad_x ** 2 + grad_y ** 2
+)
+
+pseudo_slope = (
+        pseudo_slope - pseudo_slope.min()
+) / (
+        pseudo_slope.max()
+        - pseudo_slope.min()
+        + 1e-8
+)
+
+
+# STACK CHANNELS
+
+input_tensor = np.stack([
+    image_resized,
+    pseudo_elevation,
+    pseudo_slope
+], axis=0)
+
+
+# BATCH DIMENSION
 
 input_tensor = np.expand_dims(
     input_tensor,
     axis=0
 )
 
-input_tensor = input_tensor.clone().detach()
 
-input_tensor = input_tensor.to(
-    DEVICE,
+# TO TENSOR
+
+input_tensor = torch.tensor(
+    input_tensor,
     dtype=torch.float32
-)
+).to(DEVICE)
 
 
 # INFERENCE
-
 
 with torch.no_grad():
 
@@ -158,8 +206,7 @@ with torch.no_grad():
 
     prediction = torch.sigmoid(output)
 
-
-# CONVERT TO NUMPY
+# TO NUMPY
 
 
 prediction = prediction.squeeze().cpu().numpy()
@@ -167,56 +214,75 @@ prediction = prediction.squeeze().cpu().numpy()
 
 # THRESHOLD
 
-
-pred_mask = (prediction > 0.3).astype(np.uint8)
+pred_mask = (
+        prediction > 0.3
+).astype(np.uint8)
 
 
 # VISUALIZATION NORMALIZATION
 
-
-image_vis = (image_resized - image_resized.min()) / (
-        image_resized.max() - image_resized.min()
-)
+image_vis = (
+                    image_resized - image_resized.min()
+            ) / (
+                    image_resized.max()
+                    - image_resized.min()
+                    + 1e-8
+            )
 
 
 # VISUALIZATION
 
-
-fig, ax = plt.subplots(1, 3, figsize=(18, 6))
+fig, ax = plt.subplots(
+    1,
+    4,
+    figsize=(24, 6)
+)
 
 
 # SAR IMAGE
 
-
-ax[0].imshow(image_vis, cmap="gray")
+ax[0].imshow(
+    image_vis,
+    cmap="gray"
+)
 
 ax[0].set_title("SAR Image")
-
 ax[0].axis("off")
 
 
 # GROUND TRUTH
 
+ax[1].imshow(
+    mask_resized,
+    cmap="gray"
+)
 
-ax[1].imshow(mask_resized, cmap="gray")
-
-ax[1].set_title("Ground Truth Mask")
-
+ax[1].set_title("Ground Truth")
 ax[1].axis("off")
 
 
-# PREDICTION
+# PROBABILITY MAP
 
+ax[2].imshow(
+    prediction,
+    cmap="jet"
+)
 
-# PREDICTION PROBABILITY MAP
-
-ax[2].imshow(prediction, cmap="jet")
-
-ax[2].set_title("Flood Probability Map")
-
+ax[2].set_title("Flood Probability")
 ax[2].axis("off")
+
+# BINARY MASK
+
+ax[3].imshow(
+    pred_mask,
+    cmap="gray"
+)
+
+ax[3].set_title("Predicted Mask")
+ax[3].axis("off")
 
 plt.tight_layout()
 
 plt.savefig("prediction_result.png")
+
 print("Visualization saved!")

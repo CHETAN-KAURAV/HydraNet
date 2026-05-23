@@ -9,16 +9,17 @@ from torch.utils.data import Dataset
 
 class FloodDataset(Dataset):
 
-    def __init__(self,
-                 image_dir,
-                 mask_dir,
-                 image_size=256):
+    def __init__(
+            self,
+            image_dir,
+            mask_dir,
+            image_size=256
+    ):
 
         self.image_dir = image_dir
         self.mask_dir = mask_dir
         self.image_size = image_size
 
-        # Get all SAR image filenames
         self.image_files = sorted([
             f for f in os.listdir(image_dir)
             if f.endswith(".tif")
@@ -30,7 +31,8 @@ class FloodDataset(Dataset):
     def __getitem__(self, idx):
 
 
-        # Get filenames
+        # FILENAMES
+
 
         image_name = self.image_files[idx]
 
@@ -50,21 +52,21 @@ class FloodDataset(Dataset):
         )
 
 
-        # Load SAR image
+        # LOAD IMAGE
+
 
         with rasterio.open(image_path) as src:
             image = src.read(1).astype(np.float32)
 
 
-        # Load flood mask
+        # LOAD MASK
+
 
         with rasterio.open(mask_path) as src:
             mask = src.read(1).astype(np.float32)
 
+        # CLEAN INVALID VALUES
 
-        # Normalize SAR image
-
-        # Clean invalid values
 
         image = np.nan_to_num(
             image,
@@ -74,7 +76,8 @@ class FloodDataset(Dataset):
         )
 
 
-        # Safe normalization
+        # NORMALIZATION
+
 
         mean = image.mean()
         std = image.std()
@@ -85,13 +88,14 @@ class FloodDataset(Dataset):
         image = (image - mean) / std
 
 
-        # Handle invalid labels
+        # HANDLE INVALID LABELS
 
-        # Convert -1 to 255 (ignore index)
+
         mask[mask == -1] = 255
 
 
-        # Resize image and mask
+        # RESIZE
+
 
         image = cv2.resize(
             image,
@@ -106,7 +110,8 @@ class FloodDataset(Dataset):
         )
 
 
-        # CREATE PSEUDO-ELEVATION MAP
+        # CREATE PSEUDO-ELEVATION
+
 
         pseudo_elevation = cv2.GaussianBlur(
             image,
@@ -114,16 +119,16 @@ class FloodDataset(Dataset):
             0
         )
 
-        # Normalize
         pseudo_elevation = (
-                                   pseudo_elevation - pseudo_elevation.min()
-                           ) / (
-                                   pseudo_elevation.max() -
-                                   pseudo_elevation.min() + 1e-8
-                           )
+                pseudo_elevation - pseudo_elevation.min()
+        ) / (
+                pseudo_elevation.max()
+                - pseudo_elevation.min()
+                + 1e-8
+        )
 
 
-        # CREATE PSEUDO-SLOPE MAP
+        # CREATE PSEUDO-SLOPE
 
 
         grad_x = cv2.Sobel(
@@ -146,15 +151,17 @@ class FloodDataset(Dataset):
             grad_x ** 2 + grad_y ** 2
         )
 
-        # Normalize
         pseudo_slope = (
-                               pseudo_slope - pseudo_slope.min()
-                       ) / (
-                               pseudo_slope.max() -
-                               pseudo_slope.min() + 1e-8
-                       )
+                pseudo_slope - pseudo_slope.min()
+        ) / (
+                pseudo_slope.max()
+                - pseudo_slope.min()
+                + 1e-8
+        )
+
 
         # STACK CHANNELS
+
 
         image = np.stack([
             image,
@@ -162,10 +169,9 @@ class FloodDataset(Dataset):
             pseudo_slope
         ], axis=0)
 
-        # Final shape:
-        # (3, H, W)
 
-        # Convert to tensors
+        # TO TENSOR
+
 
         image = torch.tensor(
             image,
