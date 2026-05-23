@@ -1,8 +1,8 @@
 from utils.dataset import FloodDataset
 
 # Dataset paths
-IMAGE_DIR = "../data/images"
-MASK_DIR = "../data/masks"
+IMAGE_DIR = "/content/drive/MyDrive/HydraNetData/images"
+MASK_DIR = "/content/drive/MyDrive/HydraNetData/masks"
 
 # Create dataset
 dataset = FloodDataset(
