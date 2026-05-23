@@ -2,24 +2,31 @@ import torch
 
 from models.unet_model import build_unet
 
-# -----------------------------
-# Create Model
-# -----------------------------
+# CREATE MODEL
+
 model = build_unet()
 
-# -----------------------------
-# Dummy Input
-# -----------------------------
-x = torch.randn(4, 1, 256, 256)
+# DUMMY INPUT
 
-# -----------------------------
-# Forward Pass
-# -----------------------------
+# Terrain-aware HydraNet expects:
+# 3 channels:
+# [SAR + pseudo-elevation + pseudo-slope]
+
+x = torch.randn(
+    4,
+    3,
+    256,
+    256
+)
+
+# FORWARD PASS
+
 with torch.no_grad():
+
     y = model(x)
 
-# -----------------------------
-# Print Output Shape
-# -----------------------------
+# PRINT SHAPES
+
 print("Input Shape :", x.shape)
+
 print("Output Shape:", y.shape)
