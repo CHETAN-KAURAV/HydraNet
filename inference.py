@@ -220,7 +220,7 @@ print("Mean:", prediction.mean())
 # THRESHOLD
 
 pred_mask = (
-        prediction > 0.15
+        prediction > 0.05
 ).astype(np.uint8)
 
 
