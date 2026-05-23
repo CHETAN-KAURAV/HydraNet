@@ -162,11 +162,10 @@ class FloodDataset(Dataset):
 
         # STACK CHANNELS
 
-
         image = np.stack([
             image,
-            pseudo_elevation,
-            pseudo_slope
+            0.3 * pseudo_elevation,
+            0.2 * pseudo_slope
         ], axis=0)
 
 
